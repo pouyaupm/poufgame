@@ -1,0 +1,3 @@
+body { font-family: Arial, sans-serif; }
+#chat { border: 1px solid #ccc; height: 200px; overflow-y: scroll; margin: 10px 0; padding: 5px; }
+#spyLog { border: 1px solid red; height: 150px; overflow-y: scroll; }

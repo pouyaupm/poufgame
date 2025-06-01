@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Pouf Social Game</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="login">
+  <h1>Pouf Social Game</h1>
+  <input id="nickname" placeholder="Nickname">
+  <input id="room" placeholder="Room Code (join only)">
+  <button id="create">Create Room</button>
+  <button id="join">Join Room</button>
+</div>
+<div id="game" style="display:none;">
+  <h2 id="roomTitle"></h2>
+  <div id="roomCode"></div>
+  <div id="players"></div>
+  <div id="tokens"></div>
+  <div id="chat"></div>
+  <input id="msg">
+  <select id="target"></select>
+  <button id="send">Send</button>
+  <button id="startBtn" style="display:none;">Start Game</button>
+  <h3>Trade</h3>
+  <select id="tradeTarget"></select>
+  <input id="tradeAmount" type="number" value="1" min="1">
+  <button id="tradeBtn">Propose Trade</button>
+  <h3>Spy</h3>
+  <select id="spyTarget"></select>
+  <button id="spyBtn">Spy on Player</button>
+  <div id="spy" style="display:none;">
+    <h3>Spy Panel</h3>
+    <div id="spyLog"></div>
+  </div>
+</div>
+<script src="script.js"></script>
+</body>
+</html>
