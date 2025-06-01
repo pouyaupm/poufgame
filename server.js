@@ -29,7 +29,8 @@ function createRoom(code) {
       players: {},
       started: false,
       host: null,
-      spy: null
+      spy: null,
+      watchers: {}
     };
   }
 }
@@ -39,16 +40,28 @@ function sendJson(res, obj) {
   res.end(JSON.stringify(obj));
 }
 
+function sendTokenUpdate(room, id) {
+  const p = room.players[id];
+  if (p && p.res) {
+    const payload = `event: token-update\ndata: ${JSON.stringify({id, tokens: p.tokens})}\n\n`;
+    p.res.write(payload);
+  }
+}
+
 function handlePost(req, res, body) {
   const parsed = url.parse(req.url, true);
   if (parsed.pathname === '/create-room') {
-    const {code, nickname} = JSON.parse(body);
+    const {nickname} = JSON.parse(body);
+    let code;
+    do {
+      code = Math.floor(10000 + Math.random()*90000).toString();
+    } while (rooms[code]);
     createRoom(code);
     const room = rooms[code];
     const playerId = Date.now().toString() + Math.random();
     room.players[playerId] = {id: playerId, nickname, tokens: 5, res: null};
     room.host = playerId;
-    sendJson(res, {playerId});
+    sendJson(res, {playerId, code});
   } else if (parsed.pathname === '/join-room') {
     const {code, nickname} = JSON.parse(body);
     const room = rooms[code];
@@ -67,6 +80,7 @@ function handlePost(req, res, body) {
     room.spy = spy;
     room.started = true;
     broadcast(room, 'game-start', {spy});
+    ids.forEach(id => sendTokenUpdate(room, id));
     sendJson(res, {ok: true});
   } else if (parsed.pathname === '/send-message') {
     const {code, playerId, target, text} = JSON.parse(body);
@@ -75,8 +89,15 @@ function handlePost(req, res, body) {
     const player = room.players[playerId];
     if (!player) return sendJson(res, {error: 'Bad player'});
     const msg = {from: playerId, text, to: target};
-    if (target) broadcast(room, 'private-message', msg, [target, playerId, room.spy]);
-    else broadcast(room, 'chat-message', msg);
+    if (target) {
+      const watchers = (room.watchers[playerId] || []).filter(w => w.expire > Date.now());
+      room.watchers[playerId] = watchers;
+      const ids = [target, playerId, room.spy, ...watchers.map(w=>w.id)];
+      const msgWithFlag = watchers.length ? {...msg, intercept:true} : msg;
+      broadcast(room, 'private-message', msgWithFlag, ids);
+    } else {
+      broadcast(room, 'chat-message', msg);
+    }
     sendJson(res, {ok: true});
   } else if (parsed.pathname === '/trade') {
     const {code, playerId, target, amount} = JSON.parse(body);
@@ -102,7 +123,20 @@ function handlePost(req, res, body) {
       }
     }
     broadcast(room, 'trade-result', {from, to: playerId, accept});
+    sendTokenUpdate(room, from);
+    sendTokenUpdate(room, playerId);
     sendJson(res, {ok: true});
+  } else if (parsed.pathname === '/spy') {
+    const {code, playerId, target} = JSON.parse(body);
+    const room = rooms[code];
+    const player = room && room.players[playerId];
+    if (!room || !player || !room.players[target]) return sendJson(res, {error:'Bad player'});
+    if (player.tokens <=0) return sendJson(res,{error:'No tokens'});
+    player.tokens -=1;
+    room.watchers[target] = room.watchers[target] || [];
+    room.watchers[target].push({id: playerId, expire: Date.now()+30000});
+    sendTokenUpdate(room, playerId);
+    sendJson(res,{ok:true});
   } else {
     res.writeHead(404); res.end();
   }
@@ -110,7 +144,7 @@ function handlePost(req, res, body) {
 
 function broadcast(room, event, data, targets) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  const ids = targets || Object.keys(room.players);
+  const ids = Array.from(new Set(targets || Object.keys(room.players)));
   ids.forEach(id => {
     const p = room.players[id];
     if (p && p.res) {
@@ -138,6 +172,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, {'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection':'keep-alive'});
     room.players[playerId].res = res;
     res.write('\n');
+    sendTokenUpdate(room, playerId);
   } else if (req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
